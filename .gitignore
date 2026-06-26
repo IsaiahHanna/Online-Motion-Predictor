@@ -23,7 +23,6 @@
 *.dll
 *.so.*
 
-
 # Fortran module files
 *.mod
 *.smod
@@ -43,6 +42,7 @@
 build/
 Build/
 build-*/
+cmake-build-*/
 
 # CMake generated files
 CMakeFiles/
@@ -57,6 +57,9 @@ compile_commands.json
 *.log
 *.bak
 *.swp
+*.swo
+.DS_Store
+Thumbs.db
 
 # vcpkg
 vcpkg_installed/
@@ -67,3 +70,104 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Python cache / environments
+**pycache**/
+*.py[cod]
+*.pyo
+*.pyd
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+conda-env/
+*.egg-info/
+
+# CUDA build / intermediate files
+*.cubin
+*.fatbin
+*.ptx
+*.sass
+*.nvvm
+*.cu.o
+
+# Nsight / GPU profiling outputs
+*.ncu-rep
+*.nsys-rep
+*.qdrep
+*.sqlite
+profiles/
+profiling/
+ncu-reports/
+nsys-reports/
+
+# libtorch / external dependencies
+libtorch/
+third_party/
+external/
+
+# Datasets and large raw data
+data/
+datasets/
+AMASS/
+amass/
+SMPL/
+smpl/
+SMPLX/
+smplx/
+
+# Preprocessed data
+processed/
+preprocessed/
+splits/
+*.npy
+*.npz
+*.pkl
+*.joblib
+*.h5
+*.hdf5
+
+# PyTorch / model artifacts
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.torchscript
+
+# Keep model directory structure without committing large models
+models/*
+!models/.gitkeep
+
+# Training / runtime outputs
+outputs/
+results/
+runs/
+checkpoints/
+predictions/
+visualizations/
+
+# Demo media
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.gif
+
+# Local config / secrets
+.env
+.env.*
+!.env.example
+config.local.*
+secrets.*
+*.pem
+*.key
+
+# ZMQ / runtime sockets
+*.sock
+
+# Generated documents
+*.docx
+*.pdf
