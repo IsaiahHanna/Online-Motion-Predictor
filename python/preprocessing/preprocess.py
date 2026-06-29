@@ -1,7 +1,6 @@
 """
 preprocess.py — AMASS Dataset Preprocessing Pipeline
 Online Human Intent Predictor with Adaptive Learning
-Author: Isaiah | SFU Data Science
 
 Converts AMASS motion capture sequences (SMPL+H pose parameters) into
 sliding windows of 3D joint positions ready for transformer training.
