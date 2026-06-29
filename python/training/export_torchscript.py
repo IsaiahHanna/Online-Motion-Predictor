@@ -1,13 +1,12 @@
 """
 export_torchscript.py — TorchScript Export & Verification
 Online Human Intent Predictor with Adaptive Learning
-Phase 2: Base Model Design & Offline Training
 
 Standalone script that:
   1. Loads a trained checkpoint (best.pt or last.pt)
   2. Exports the model as a TorchScript .pt file
   3. Verifies the round-trip: scripted output == eager output within 1e-4
-  4. Saves a test_io.pt tensor pair for use in Phase 3 C++ verification
+  4. Saves a test_io.pt tensor pair for use in later phase
 
 Run this separately from train.py if the TorchScript export inside the
 training script failed, or to re-export with a different checkpoint.
@@ -136,9 +135,9 @@ def export(args: argparse.Namespace) -> None:
     log.info("Output shape: %s  ✓", tuple(out_scripted.shape))
 
     # ------------------------------------------------------------------
-    # Save test I/O for C++ verification (Phase 3)
+    # Save test I/O for C++ verification 
     #
-    # In Phase 3 you will load this file in C++ and assert that
+    # In later phase, will load this file in C++ and assert that
     # torch::jit::load(model).forward(x) matches y within 1e-4.
     # Use a batch size of 1 to match the C++ runtime's inference call.
     # ------------------------------------------------------------------
@@ -159,7 +158,7 @@ def export(args: argparse.Namespace) -> None:
     log.info("Test I/O saved to %s", test_io_path)
     log.info("  x shape: %s", tuple(test_input.shape))
     log.info("  y shape: %s", tuple(test_output.shape))
-    log.info("  Load in Phase 3 C++ with: torch::load('%s')", test_io_path)
+    log.info("  Load in C++ with: torch::load('%s')", test_io_path)
 
     # ------------------------------------------------------------------
     # Inference latency (single-sample, GPU if available)
@@ -186,7 +185,7 @@ def export(args: argparse.Namespace) -> None:
 
     log.info("Inference latency (single sample, %s): %.3f ms", device, elapsed_ms)
     if elapsed_ms < 5.0:
-        log.info("  ✓ < 5 ms target for Phase 3 C++ inference")
+        log.info("  ✓ < 5 ms target for C++ inference phase")
     else:
         log.warning(
             "  %.3f ms exceeds 5 ms Python target — may still meet C++ target "
@@ -206,8 +205,6 @@ def export(args: argparse.Namespace) -> None:
     print(f"  Round-trip  : max_diff = {max_diff:.2e}  ✓")
     print(f"  Latency     : {elapsed_ms:.3f} ms  ({device})")
     print("=" * 55)
-    print("\nNext step: copy intent_model.pt and test_io.pt to your VM")
-    print("and proceed to Phase 3 (C++ libtorch integration).")
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +229,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--test_io",
         default="models/torchscript/test_io.pt",
-        help="Output path for the test I/O tensor pair (Phase 3 C++ verification).",
+        help="Output path for the test I/O tensor pair.",
     )
     # Must match the architecture used during training
     p.add_argument("--hidden",   type=int, default=128, help="Hidden dim (must match training).")
