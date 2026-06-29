@@ -1,7 +1,6 @@
 """
 test_preprocess.py — Preprocessing Output Validation
 Online Human Intent Predictor with Adaptive Learning
-Author: Isaiah | SFU Data Science
 
 Validates that the preprocessing pipeline produced correct, model-ready
 outputs. Run this after preprocess.py completes before moving to training.
