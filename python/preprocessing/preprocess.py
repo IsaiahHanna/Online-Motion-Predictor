@@ -73,7 +73,6 @@ if not hasattr(np, "unicode"):
     np.unicode = str
 if not hasattr(np, "str"):
     np.str = str
-    
 import torch
 # ---------------------------------------------------------------------------
 # Logging
@@ -513,6 +512,12 @@ def run(args: argparse.Namespace) -> None:
         subject_ids, seed=args.split_seed
     )
 
+    split_masks = {
+        "train": train_mask,
+        "val":   val_mask,
+        "test":  test_mask,
+    }
+
     splits = {
         "train": (X[train_mask], Y[train_mask]),
         "val":   (X[val_mask],   Y[val_mask]),
@@ -523,6 +528,8 @@ def run(args: argparse.Namespace) -> None:
         log.info("  %-6s  %6d windows", split_name, X_split.shape[0])
         np.save(output_dir / f"X_{split_name}.npy", X_split)
         np.save(output_dir / f"Y_{split_name}.npy", Y_split)
+        np.save(output_dir / f"subject_ids_{split_name}.npy",
+                subject_ids[split_masks[split_name]])
         log.info("    Saved → X_%s.npy  Y_%s.npy", split_name, split_name)
 
     np.save(output_dir / "X.npy",           X)
