@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
     torch::Device device(torch::kCPU);
     if (torch::cuda::is_available){
         device = torch::Device(torch::kCUDA);
-        std::out << "CUDA available - using GPU.\n"
+        std::cout << "CUDA available - using GPU.\n"
     } else {
         std::cout << "CUDA unavailable - using CPU.\n"
     }
