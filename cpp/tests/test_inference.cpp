@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
     // ----------------------------------------------------
     // 0. Argument Check
     // ----------------------------------------------------
-    if (argc > 3) {
+    if (argc < 3) {
         std::cerr << "Usage: " << argv[0]
                   << " <intent_model.pt> <test_io.pt>\n";
         return 1;
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
     torch::Tensor x,y;
     try {
         // Read the file into a byte buffer
-        std::fstream file(argv[2], std::ios::binary | std::ios::ate);
+        std:ifstream file(argv[2], std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
             std::cerr << "Cannot open test_io.pt: " << argv[2] << "\n";
             return 1;
@@ -138,7 +138,7 @@ int main(int argc, char* argv[])
         
         std::cout << "Inference complete. latency: " << elapsed_ms << " ms\n";
         
-        if (elapsed_ms < 5.0) {
+        if (elapsed_ms > 5.0) {
             std::cout << "PASS - latency " << elapsed_ms << " ms exceeds 5 ms target.\n";
         }
     }
@@ -171,7 +171,7 @@ int main(int argc, char* argv[])
     }
 
     // Tolerance check (spec: within 1e-4)
-    bool pass = torch::allclose(output, y, 1e-4, 1e-4) // rtol and atol equal 1e-4
+    bool pass = torch::allclose(output, y, 1e-4, 1e-4); // rtol and atol equal 1e-4
 
     if (pass) {
         std::cout << "PASS - C++ output matches Python within 1e-4 tolerance. \n";
