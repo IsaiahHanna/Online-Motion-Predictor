@@ -261,7 +261,8 @@ def train(args: argparse.Namespace) -> None:
     ts_dir.mkdir(parents=True, exist_ok=True)
 
     device = torch.device(
-        "cuda" if torch.cuda.is_available() else
+        # Uncomment out below if you want to write 
+        # "cuda" if torch.cuda.is_available() else
         "cpu"
     )
     log.info("Device: %s", device)
