@@ -15,10 +15,10 @@ Predictor::Predictor(const std::string& model_path, torch::Device device)
     try {
         module_ = torch::jit::load(model_path);
         module_.to(device_);
-        model_.eval();
+        module_.eval();
     }
     catch (const c10::Error & e) {
-        throw std::runtime_error("Module failed to load from: " + model_path + "\n" + e.what())
+        throw std::runtime_error("Module failed to load from: " + model_path + "\n" + e.what());
     }
 }
 
@@ -49,7 +49,7 @@ torch::Tensor Predictor::infer(const torch::Tensor& x)
 // ---------------------------------------------------------------------------
 torch::Tensor Predictor::forward_for_update(const torch::Tensor& x)
 {
-    std::vector<torch::jit::IValue> inputs = x;
+    std::vector<torch::jit::IValue> inputs = {x};
     return module_.forward(inputs).toTensor();
 }
 
