@@ -43,9 +43,9 @@ int main(int argc, char* argv[])
     torch::Device device(torch::kCPU);
     if (torch::cuda::is_available()){
         device = torch::Device(torch::kCUDA);
-        std::cout << "CUDA available - using GPU.\n"
+        std::cout << "CUDA available - using GPU.\n";
     } else {
-        std::cout << "CUDA unavailable - using CPU.\n"
+        std::cout << "CUDA unavailable - using CPU.\n";
     }
 
     // ----------------------------------------------------
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
     torch::Tensor x,y;
     try {
         // Read the file into a byte buffer
-        std:ifstream file(argv[2], std::ios::binary | std::ios::ate);
+        std::ifstream file(argv[2], std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
             std::cerr << "Cannot open test_io.pt: " << argv[2] << "\n";
             return 1;
