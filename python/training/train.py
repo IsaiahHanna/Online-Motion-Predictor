@@ -262,7 +262,6 @@ def train(args: argparse.Namespace) -> None:
 
     device = torch.device(
         "cuda" if torch.cuda.is_available() else
-        "mps"  if torch.mps.is_available() else
         "cpu"
     )
     log.info("Device: %s", device)
