@@ -163,14 +163,14 @@ int main(int argc, char* argv[])
     std::cout << "mean_diff : " << mean_diff << "\n";
     std::cout << std::defaultfloat;
     
-    \\ Output shape check
+    // Output shape check
     if (output.sizes() != y.sizes()) {
         std::cerr << "FAIL - output shape " << output.sizes() 
                   << " != expected " << y.sizes() << "\n";
         return 1;
     }
 
-    \\ Tolerance check (spec: within 1e-4)
+    // Tolerance check (spec: within 1e-4)
     bool pass = torch::allclose(output, y, 1e-4, 1e-4) // rtol and atol equal 1e-4
 
     if (pass) {
