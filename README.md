@@ -16,20 +16,23 @@ The pipeline is built in C++ using libtorch and TorchScript for inference, with 
 ---
 
 ## Architecture
+
+```text
 MediaPipe Pose (Python)
-│
-│  ZMQ (push/pull)
-▼
-Ring Buffer (C++)
-│
-▼
-TorchScript Transformer (frozen)
-│
-▼
-LoRA Adapters (online update)
-│
-▼
-Predicted Pose (next N frames)
+          │
+          │  ZMQ push/pull
+          ▼
+Thread-Safe Ring Buffer (C++)
+          │
+          ▼
+TorchScript Transformer (Frozen)
+          │
+          ▼
+LoRA Adapters (Online Adaptation)
+          │
+          ▼
+Predicted Future Pose Sequence
+```
 
 --- 
 
