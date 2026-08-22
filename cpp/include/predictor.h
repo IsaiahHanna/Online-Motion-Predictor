@@ -1,9 +1,10 @@
 // predictor.h
 // Online Human Intent Predictor with Adaptive Learning
 //
-// Wraps the TorchScript module and exposes two inference entry points:
-//   infer()              — fast path, no gradient graph
-//   forward_for_update() — gradient-enabled path for adaptation
+// Wraps the TorchScript module and exposes three inference entry points:
+//   infer()               — fast prediction-only path
+//   infer_with_hidden()   — prediction + hidden-state path
+//   forward_for_update()  — gradient-enabled path for adaptation
 
 #pragma once
 
@@ -31,7 +32,7 @@ public:
     // Returns: [1, K, D]
     torch::Tensor infer(const torch::Tensor& x);
 
-    torch::Tensor infer_with_hidden(const torch::Tensor& x);
+    PredictorOutput infer_with_hidden(const torch::Tensor& x);
 
     // Gradient-enabled forward pass for the online adaptation loop.
     // NOT wrapped in NoGradGuard — gradients must flow.
