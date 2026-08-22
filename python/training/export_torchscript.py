@@ -178,13 +178,17 @@ def export(args: argparse.Namespace) -> None:
     with torch.no_grad():
         test_output = reloaded(test_input)
 
+        test_pred_with_hidden, test_hidden = reloaded.forward_with_hidden(test_input)
+
     test_io_path = Path(args.test_io)
     test_io_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
-            "x":            test_input.cpu(),   # [1, 30, 99]
-            "y":            test_output.cpu(),  # [1, 15, 99]
-            "model_config": cfg,
+            "x":             test_input.cpu(),   # [1, 30, 99]
+            "y":             test_output.cpu(),  # [1, 15, 99]
+            "hidden":        test_hidden.cpu(),  # [1, 128]
+            "y_with_hidden": test_pred_with_hidden.cpu(),
+            "model_config":  cfg,
         },
         test_io_path,
     )
