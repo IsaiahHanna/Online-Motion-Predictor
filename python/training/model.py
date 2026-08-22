@@ -324,6 +324,18 @@ if __name__ == "__main__":
     assert pred.shape == (4, 15, 99), f"Unexpected output shape: {pred.shape}"
     print(f"Forward pass:     {x.shape} -> {pred.shape}")
 
+    # Forward pass with hidden
+    pred2, hidden = model.forward_with_hidden(x)
+
+    assert pred2.shape == (4, 15, 99)
+    assert hidden.shape == (4, 128)
+    assert torch.allclose(pred, pred2, atol=1e-6, rtol=1e-6)
+
+    print(
+        f"forward_with_hidden: pred={pred2.shape}, "
+        f"hidden={hidden.shape}"
+    )
+
     # Parameter count
     counts = model.count_parameters()
     print(f"Total params:    {counts['total']:,}")
