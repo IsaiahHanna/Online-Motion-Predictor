@@ -64,7 +64,7 @@ void PoseReceiver::receive_loop(const std::string& endpoint)
     while (running_.load())
     {
         zmq::message_t msg; 
-        auto res = sock.recv(msg, zmq::recv_flage::none);
+        auto res = sock.recv(msg, zmq::recv_flags::none);
         
         if (!res){
             // Timeout — normal, just recheck the running_ flag.
@@ -88,12 +88,12 @@ void PoseReceiver::receive_loop(const std::string& endpoint)
         if (frames_received > 0 && hdr.seq != last_seq + 1) {
             std::cerr << "[PoseReceiver] Dropped " << (hdr.seq - last_seq - 1)<< " frame(s) between seq " << last_seq<< " and " << hdr.seq << "\n"; 
         } 
-        last_seq = hdr_seq;
+        last_seq = hdr.seq;
         ++frames_received;
 
         // Periodic heartbeat log
         if (frames_received % 150 == 0) {
-            std::cout << "[PoseReceiver] Received " << frames_received << " frames. Last_seq: " << hdr.seq << "\n"
+            std::cout << "[PoseReceiver] Received " << frames_received << " frames. Last_seq: " << hdr.seq << "\n";
         }
         buf_.push(frame);
     }
