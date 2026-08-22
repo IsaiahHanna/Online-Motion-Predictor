@@ -37,8 +37,7 @@ public:
     // Gradient-enabled forward pass for the online adaptation loop.
     // NOT wrapped in NoGradGuard — gradients must flow.
     // x: [1, W, D] on device.
-    // Returns: [1, K, D] with a live autograd graph.
-    torch::Tensor forward_for_update(const torch::Tensor& x);
+    PredictorOutput forward_for_update(const torch::Tensor& x);
 
     // Access named parameters for the optimizer.
     // Returns references into the live module — updating them updates the model.

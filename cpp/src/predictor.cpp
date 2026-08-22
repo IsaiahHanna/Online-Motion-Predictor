@@ -73,10 +73,25 @@ PredictorOutput Predictor::infer_with_hidden(const torch::Tensor& x)
 // Keeping them as separate named functions makes it impossible to
 // accidentally use the wrong one.
 // ---------------------------------------------------------------------------
-torch::Tensor Predictor::forward_for_update(const torch::Tensor& x)
+PredictorOutput Predictor::forward_for_update(const torch::Tensor& x)
 {
     std::vector<torch::jit::IValue> inputs = {x};
-    return module_.forward(inputs).toTensor();
+
+    auto method = module_.get_method("forward_with_hidden");
+    auto result = method(inputs);
+    auto tuple  = result.toTuple();
+
+    const auto& elements = tuple->elements();
+    if (elements.size() != 2) {
+        throw std::runtime_error(
+            "forward_with_hidden expected 2 outputs"
+        );
+    }
+
+    return {
+        elements[0].toTensor(),   // prediction — carries grad graph
+        elements[1].toTensor()    // hidden     — carries grad graph
+    };
 }
 
 // ---------------------------------------------------------------------------
