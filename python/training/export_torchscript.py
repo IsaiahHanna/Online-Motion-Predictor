@@ -126,6 +126,40 @@ def export(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     # ------------------------------------------------------------------
+    # Export method check
+    # ------------------------------------------------------------------
+    with torch.no_grad():
+        pred_hidden_eager, hidden_eager = model.forward_with_hidden(dummy)
+        pred_hidden_scripted, hidden_scripted = reloaded.forward_with_hidden(dummy)
+
+    pred_diff = (
+        pred_hidden_eager - pred_hidden_scripted
+    ).abs().max().item()
+
+    hidden_diff = (
+        hidden_eager - hidden_scripted
+    ).abs().max().item()
+
+    assert pred_hidden_scripted.shape == (4, 15, 99)
+    assert hidden_scripted.shape      == (4, args.hidden)
+
+    assert pred_diff   < 1e-4
+    assert hidden_diff < 1e-4
+
+    # Also verify that forward_with_hidden produces the exact same prediction as ordinary forward()
+    forward_consistency = (
+        out_scripted - pred_hidden_scripted
+    ).abs().max().item()
+
+    assert forward_consistency < 1e-4
+
+    log.info(
+        "forward_with_hidden verified: pred=%s hidden=%s",
+        tuple(pred_hidden_scripted.shape),
+        tuple(hidden_scripted.shape),
+    )
+
+    # ------------------------------------------------------------------
     # Output shape check
     # ------------------------------------------------------------------
     assert out_scripted.shape == (4, 15, 99), (
