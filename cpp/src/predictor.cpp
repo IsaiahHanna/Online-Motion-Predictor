@@ -38,7 +38,7 @@ torch::Tensor Predictor::infer(const torch::Tensor& x)
     return module_.forward(inputs).toTensor(); // If model returns a tuple, use .toTuple()->elements()[0].toTensor() 
 }
 
-torch::Tensor Predictor::infer_with_hidden(const torch::Tensor& x)
+PredictorOutput Predictor::infer_with_hidden(const torch::Tensor& x)
 {
     torch::NoGradGuard no_grad;
     std::vector<torch::jit::IValue> inputs = {x};
@@ -48,9 +48,9 @@ torch::Tensor Predictor::infer_with_hidden(const torch::Tensor& x)
     auto tuple  = result.toTuple();
 
     const auto& elements = tuple->elements();
-    if (elements.size != 2) {
+    if (elements.size() != 2) {
         throw std::runtime_error(
-            "forward_with_hidden expected 2 inputs"
+            "forward_with_hidden expected 2 outputs"
         );
     }
 
@@ -58,8 +58,8 @@ torch::Tensor Predictor::infer_with_hidden(const torch::Tensor& x)
     torch::Tensor hidden     = elements[1].toTensor();
 
     return {
-        hidden,
-        prediction
+        prediction,
+        hidden
     };
 
 }
