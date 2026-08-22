@@ -198,6 +198,19 @@ class IntentPredictor(nn.Module):
         # Decode to K future frames
         x = self.head(x)                       # [B, K * in_dim]
         return x.view(-1, self.K, self.in_dim) # [B, K, 99]
+
+    @torch.jit.export
+    def forward_with_hidden(
+        self,
+        x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        hidden = self._encode_hidden(x)
+
+        pred = self.head(hidden)
+        pred = pred.view(-1, self.K, self.in_dim)
+
+        return pred, hidden
+        
     
     # ---------------------------------------------------------------------------
     # Adapter insertion (prep for later phases)
