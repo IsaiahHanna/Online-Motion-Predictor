@@ -17,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 constexpr int W   = 30;   // inference window size (frames)
+constexpr int K   = 15;   // prediction horizon
 constexpr int D   = 99;   // keypoint dimensions (33 joints × 3 coords)
 constexpr int BUF = 64;   // ring buffer capacity — must be > W
 
