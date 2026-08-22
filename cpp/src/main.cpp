@@ -85,7 +85,7 @@ int main(int argc, char* argv[])
     RingBuffer   buf;
     PoseReceiver poseReceiver(buf, endpoint, running);
     Predictor    predictor(model_path, device);
-    HeadAdapter headAdapter(128, 15*99, device);
+    HeadAdapter headAdapter(128, K*99, device);
 
     // ------------------------------------------------------------------
     // 4. Warm-up
