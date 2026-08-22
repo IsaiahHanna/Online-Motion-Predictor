@@ -84,7 +84,7 @@ void PoseReceiver::receive_loop(const std::string& endpoint)
         std::memcpy(&hdr, msg.data(), sizeof(hdr));
         std::memcpy(frame.data(), static_cast<const char*>(msg.data()) + sizeof(hdr), D * sizeof(float));
 
-        \\ Detect dropped frames
+        // Detect dropped frames
         if (frames_received > 0 && hdr.seq != last_seq + 1) {
             std::cerr << "[PoseReceiver] Dropped " << (hdr.seq - last_seq - 1)<< " frame(s) between seq " << last_seq<< " and " << hdr.seq << "\n"; 
         } 
