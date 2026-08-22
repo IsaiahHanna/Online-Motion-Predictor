@@ -181,6 +181,17 @@ class IntentPredictor(nn.Module):
         nn.init.xavier_uniform_(self.head.weight)
         nn.init.zeros_(self.head.bias)
 
+    def _encode_hidden(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Encode the input sequence and return the final-timestep hidden vector.
+
+        x      : [B, W, 99]
+        returns: [B, hidden]
+        """
+        x = self.proj(x) + self.pos
+        x = self.encoder(x)
+        return x[:, -1, :]
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         x : [B, W, 99]
