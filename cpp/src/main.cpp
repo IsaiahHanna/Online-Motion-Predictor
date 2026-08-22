@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <csignal>
 #include <deque>
 #include <iostream>
@@ -60,8 +61,10 @@ int main(int argc, char* argv[])
         std::cerr << "  endpoint default: tcp://localhost:5555\n";
         return 1;
     }
+
     const std::string model_path = argv[1];
-    const std::string endpoint   = (argc >= 3) ? argv[2] : "tcp://localhost:5555";
+    const std::string endpoint   =
+        (argc >= 3) ? argv[2] : "tcp://localhost:5555";
 
     // ------------------------------------------------------------------
     // 1. SIGINT handler for clean shutdown
@@ -72,6 +75,7 @@ int main(int argc, char* argv[])
     // 2. Device selection
     // ------------------------------------------------------------------
     torch::Device device(torch::kCPU);
+
     if (torch::cuda::is_available()) {
         device = torch::Device(torch::kCUDA);
         std::cout << "CUDA available. Using GPU.\n";
@@ -85,15 +89,21 @@ int main(int argc, char* argv[])
     RingBuffer   buf;
     PoseReceiver poseReceiver(buf, endpoint, running);
     Predictor    predictor(model_path, device);
-    HeadAdapter headAdapter(128, K*99, device);
+    HeadAdapter  headAdapter(128, K * 99, device);
 
     // ------------------------------------------------------------------
     // 4. Warm-up
     // ------------------------------------------------------------------
     for (int i = 0; i < 10; i++) {
-        predictor.infer(torch::zeros({1, W, D}, device));
+        predictor.infer(
+            torch::zeros({1, W, D}, device)
+        );
     }
-    torch::cuda::synchronize();
+
+    if (device.is_cuda()) {
+        torch::cuda::synchronize();
+    }
+
     std::cout << "Warm-up complete.\n";
 
     // ------------------------------------------------------------------
@@ -101,25 +111,83 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------
     zmq::context_t pub_ctx(1);
     zmq::socket_t  pub_sock(pub_ctx, zmq::socket_type::pub);
+
     pub_sock.set(zmq::sockopt::sndhwm, 4);
     pub_sock.bind("tcp://*:5556");
+
     std::cout << "Publishing predictions on tcp://*:5556\n";
 
     // ------------------------------------------------------------------
-    // 6. Latency tracking
+    // 6. Latency and Adaptation tracking
     // ------------------------------------------------------------------
     std::vector<double> frame_times_ms;
     frame_times_ms.reserve(10000);
 
-    uint64_t last_seq    = 0;
-    uint64_t frame_count = 0;
+    uint64_t last_seq     = 0;
+    uint64_t frame_count  = 0;
     uint64_t update_count = 0;
+
+    constexpr double ADAPT_SECONDS = 60.0;
+
+    bool adaptation_started = false;
+    bool adapter_frozen     = false;
+
+    std::chrono::steady_clock::time_point adaptation_start;
+
+    // MSE over the complete 60-second adaptation period
+    double adapted_mse_sum = 0.0;
+    double base_mse_sum    = 0.0;
+    uint64_t mse_count     = 0;
+
+    // MSE over the most recent 10 updates
+    double recent_adapted_mse_sum = 0.0;
+    double recent_base_mse_sum    = 0.0;
+    uint64_t recent_mse_count     = 0;
+
+    // Separate post-freeze statistics
+    double post_adapted_mse_sum = 0.0;
+    double post_base_mse_sum    = 0.0;
+    uint64_t post_mse_count     = 0;
+
+    // ------------------------------------------------------------------
+    // Record initial base-model parameter norm.
+    //
+    // This lets us confirm at shutdown that the base model stayed frozen.
+    // ------------------------------------------------------------------
+    double base_norm_before = 0.0;
+
+    {
+        torch::NoGradGuard no_grad;
+
+        for (const auto& item : predictor.named_parameters()) {
+            base_norm_before +=
+                item.second
+                    .detach()
+                    .pow(2)
+                    .sum()
+                    .item<double>();
+        }
+
+        base_norm_before =
+            std::sqrt(base_norm_before);
+    }
+
+    std::cout
+        << "Initial base model norm: "
+        << base_norm_before
+        << "\n";
+
+    std::cout
+        << "Initial adapter norm: "
+        << headAdapter.weight_norm()
+        << "\n";
 
     // Delayed label buffer
     // The target for the prediction made at frame T is the
     // actual observed keypoints at frame T+K (0.5 s later).
-    // Store pending (seq, input_tensor) pairs; match when head_ > seq + K.
-    std::deque<std::pair<uint64_t, torch::Tensor>> pending_labels;
+    std::deque<
+        std::pair<uint64_t, torch::Tensor>
+    > pending_labels;
 
     // ------------------------------------------------------------------
     // 7. Main inference loop
@@ -128,27 +196,53 @@ int main(int argc, char* argv[])
 
     while (running.load())
     {
-        auto t_frame_start = std::chrono::steady_clock::now();
+        auto t_frame_start =
+            std::chrono::steady_clock::now();
 
         // 7a. Get window from ring buffer
         Window window;
-        last_seq = buf.get_window(window, last_seq);
+
+        last_seq =
+            buf.get_window(
+                window,
+                last_seq
+            );
 
         // 7b. Build tensor and run base inference
-        auto x                = window_to_tensor(window, device);
-        auto predictor_output = predictor.infer_with_hidden(x);
-        auto base_pred        = predictor_output.prediction;   // [1, 15, 99]
-        auto hidden           = predictor_output.hidden;       // [1, 128]
+        auto x =
+            window_to_tensor(
+                window,
+                device
+            );
+
+        auto predictor_output =
+            predictor.infer_with_hidden(x);
+
+        auto base_pred =
+            predictor_output.prediction;   // [1, K, 99]
+
+        auto hidden =
+            predictor_output.hidden;       // [1, 128]
 
         // Adapter produces a residual correction to the base prediction
-        auto adapter_out = headAdapter.forward(hidden);
-        auto final_pred  = base_pred + adapter_out.view({1, K, D});
+        auto adapter_out =
+            headAdapter.forward(hidden);
 
+        auto final_pred =
+            base_pred +
+            adapter_out.view({1, K, D});
 
         // 7c. Publish prediction
-        auto pred_cpu = final_pred.to(torch::kCPU).contiguous();
+        auto pred_cpu =
+            final_pred
+                .to(torch::kCPU)
+                .contiguous();
+
         pub_sock.send(
-            zmq::buffer(pred_cpu.data_ptr<float>(), K * D * sizeof(float)),
+            zmq::buffer(
+                pred_cpu.data_ptr<float>(),
+                K * D * sizeof(float)
+            ),
             zmq::send_flags::dontwait
         );
 
@@ -175,7 +269,10 @@ int main(int argc, char* argv[])
             }
 
             auto window_tensor =
-                window_to_tensor(window, device);
+                window_to_tensor(
+                    window,
+                    device
+                );
 
             auto target =
                 window_tensor
@@ -185,41 +282,215 @@ int main(int argc, char* argv[])
             auto old_output =
                 predictor.infer_with_hidden(old_x);
 
-            auto pred_with_grad =
-                old_output.prediction.detach() +
-                headAdapter
-                    .forward(old_output.hidden)
-                    .view({1, K, D});
+            auto base_eval =
+                old_output.prediction.detach();
 
-            headAdapter.update(
-                pred_with_grad,
-                target
-            );
+            // ----------------------------------------------------------
+            // Measure base-model and adapted-model MSE BEFORE this update.
+            // ----------------------------------------------------------
+            double base_mse    = 0.0;
+            double adapted_mse = 0.0;
 
-            ++update_count;
+            {
+                torch::NoGradGuard no_grad;
 
-            if (update_count % 10 == 0) {
+                auto adapted_eval =
+                    base_eval +
+                    headAdapter
+                        .forward(old_output.hidden)
+                        .view({1, K, D});
+
+                base_mse =
+                    torch::mse_loss(
+                        base_eval,
+                        target
+                    ).item<double>();
+
+                adapted_mse =
+                    torch::mse_loss(
+                        adapted_eval,
+                        target
+                    ).item<double>();
+            }
+
+            // ----------------------------------------------------------
+            // Start the 60-second timer only when the first real delayed
+            // label becomes available.
+            // ----------------------------------------------------------
+            if (!adaptation_started) {
+                adaptation_started = true;
+
+                adaptation_start =
+                    std::chrono::steady_clock::now();
+
                 std::cout
-                    << "Update "
-                    << update_count
-                    << "  adapter norm: "
-                    << headAdapter.weight_norm()
-                    << "\n";
+                    << "[Adapt] Starting 60-second adaptation period.\n";
+            }
+
+            double elapsed_seconds =
+                std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() -
+                    adaptation_start
+                ).count();
+
+            // ----------------------------------------------------------
+            // Adapt for the first 60 seconds.
+            // ----------------------------------------------------------
+            if (!adapter_frozen)
+            {
+                base_mse_sum +=
+                    base_mse;
+
+                adapted_mse_sum +=
+                    adapted_mse;
+
+                ++mse_count;
+
+                recent_base_mse_sum +=
+                    base_mse;
+
+                recent_adapted_mse_sum +=
+                    adapted_mse;
+
+                ++recent_mse_count;
+
+                auto pred_with_grad =
+                    base_eval +
+                    headAdapter
+                        .forward(old_output.hidden)
+                        .view({1, K, D});
+
+                headAdapter.update(
+                    pred_with_grad,
+                    target
+                );
+
+                ++update_count;
+
+                // ------------------------------------------------------
+                // Validation log every 10 updates.
+                // ------------------------------------------------------
+                if (update_count % 10 == 0)
+                {
+                    std::cout
+                        << "Update "
+                        << update_count
+
+                        << "  adapter norm: "
+                        << headAdapter.weight_norm()
+
+                        << "  recent base MSE: "
+                        << recent_base_mse_sum /
+                           recent_mse_count
+
+                        << "  recent adapted MSE: "
+                        << recent_adapted_mse_sum /
+                           recent_mse_count
+
+                        << "  elapsed: "
+                        << elapsed_seconds
+                        << " s\n";
+
+                    recent_base_mse_sum =
+                        0.0;
+
+                    recent_adapted_mse_sum =
+                        0.0;
+
+                    recent_mse_count =
+                        0;
+                }
+
+                // ------------------------------------------------------
+                // After 60 seconds, stop updating the adapter.
+                // ------------------------------------------------------
+                if (elapsed_seconds >= ADAPT_SECONDS)
+                {
+                    adapter_frozen = true;
+
+                    std::cout
+                        << "\n"
+                        << "60 SECOND ADAPTATION COMPLETE\n"
+
+                        << "Adapter norm: "
+                        << headAdapter.weight_norm()
+                        << "\n"
+
+                        << "Training base MSE: "
+                        << base_mse_sum / mse_count
+                        << "\n"
+
+                        << "Training adapted MSE: "
+                        << adapted_mse_sum / mse_count
+                        << "\n"
+
+                        << "Adapter frozen.\n\n";
+                }
+            }
+
+            // ----------------------------------------------------------
+            // After 60 seconds, compare the frozen personalized adapter
+            // with the unchanged base model on future samples.
+            // ----------------------------------------------------------
+            else
+            {
+                post_base_mse_sum +=
+                    base_mse;
+
+                post_adapted_mse_sum +=
+                    adapted_mse;
+
+                ++post_mse_count;
+
+                if (post_mse_count % 30 == 0)
+                {
+                    std::cout
+                        << "[Frozen comparison]"
+                        << " samples="
+                        << post_mse_count
+
+                        << "  base MSE="
+                        << post_base_mse_sum /
+                           post_mse_count
+
+                        << "  adapted MSE="
+                        << post_adapted_mse_sum /
+                           post_mse_count
+
+                        << "\n";
+                }
             }
         }
 
         // 7d. Latency bookkeeping
-        if (device.is_cuda()) torch::cuda::synchronize();
-        auto t_frame_end = std::chrono::steady_clock::now();
-        double ms = std::chrono::duration<double, std::milli>(
-                        t_frame_end - t_frame_start).count();
+        if (device.is_cuda()) {
+            torch::cuda::synchronize();
+        }
+
+        auto t_frame_end =
+            std::chrono::steady_clock::now();
+
+        double ms =
+            std::chrono::duration<double, std::milli>(
+                t_frame_end -
+                t_frame_start
+            ).count();
+
         frame_times_ms.push_back(ms);
+
         ++frame_count;
 
         if (frame_count % 150 == 0) {
-            std::cout << "Frames: " << frame_count
-                      << "  Last latency: " << ms << " ms\n"
-                      << "   HeadAdapter weight norm: " << headAdapter.weight_norm() << "\n";
+            std::cout
+                << "Frames: "
+                << frame_count
+                << "  Last latency: "
+                << ms
+                << " ms\n"
+
+                << "   HeadAdapter weight norm: "
+                << headAdapter.weight_norm()
+                << "\n";
         }
     }
 
@@ -229,13 +500,117 @@ int main(int argc, char* argv[])
     std::cout << "\nShutting down...\n";
 
     if (!frame_times_ms.empty()) {
-        std::sort(frame_times_ms.begin(), frame_times_ms.end());
-        size_t n   = frame_times_ms.size();
-        double p50 = frame_times_ms[n * 0.50];
-        double p99 = frame_times_ms[n * 0.99];
-        std::cout << "Total frames : " << frame_count << "\n";
-        std::cout << "Latency p50  : " << p50 << " ms\n";
-        std::cout << "Latency p99  : " << p99 << " ms\n";
+        std::sort(
+            frame_times_ms.begin(),
+            frame_times_ms.end()
+        );
+
+        size_t n =
+            frame_times_ms.size();
+
+        double p50 =
+            frame_times_ms[n * 0.50];
+
+        double p99 =
+            frame_times_ms[n * 0.99];
+
+        std::cout
+            << "Total frames : "
+            << frame_count
+            << "\n";
+
+        std::cout
+            << "Latency p50  : "
+            << p50
+            << " ms\n";
+
+        std::cout
+            << "Latency p99  : "
+            << p99
+            << " ms\n";
+    }
+
+    // ------------------------------------------------------------------
+    // Verify that the frozen base model did not change.
+    // ------------------------------------------------------------------
+    double base_norm_after = 0.0;
+
+    {
+        torch::NoGradGuard no_grad;
+
+        for (const auto& item : predictor.named_parameters()) {
+            base_norm_after +=
+                item.second
+                    .detach()
+                    .pow(2)
+                    .sum()
+                    .item<double>();
+        }
+
+        base_norm_after =
+            std::sqrt(base_norm_after);
+    }
+
+    std::cout
+        << "Base model norm before: "
+        << base_norm_before
+        << "\n";
+
+    std::cout
+        << "Base model norm after : "
+        << base_norm_after
+        << "\n";
+
+    std::cout
+        << "Base model norm delta : "
+        << std::abs(
+               base_norm_after -
+               base_norm_before
+           )
+        << "\n";
+
+    // ------------------------------------------------------------------
+    // Final frozen-adapter comparison.
+    // ------------------------------------------------------------------
+    if (post_mse_count > 0)
+    {
+        double post_base_avg =
+            post_base_mse_sum /
+            post_mse_count;
+
+        double post_adapted_avg =
+            post_adapted_mse_sum /
+            post_mse_count;
+
+        std::cout
+            << "Post-freeze samples     : "
+            << post_mse_count
+            << "\n";
+
+        std::cout
+            << "Post-freeze base MSE    : "
+            << post_base_avg
+            << "\n";
+
+        std::cout
+            << "Post-freeze adapted MSE : "
+            << post_adapted_avg
+            << "\n";
+
+        if (post_base_avg > 0.0) {
+            double improvement =
+                100.0 *
+                (
+                    post_base_avg -
+                    post_adapted_avg
+                ) /
+                post_base_avg;
+
+            std::cout
+                << "Post-freeze improvement: "
+                << improvement
+                << "%\n";
+        }
     }
 
     return 0;
