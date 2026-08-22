@@ -11,6 +11,12 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 
+struct PredictorOutput
+{
+    torch::Tensor prediction;
+    torch::Tensor hidden;
+};
+
 class Predictor
 {
 public:
@@ -24,6 +30,8 @@ public:
     // x: [1, W, D] on the same device as the model.
     // Returns: [1, K, D]
     torch::Tensor infer(const torch::Tensor& x);
+
+    torch::Tensor infer_with_hidden(const torch::Tensor& x);
 
     // Gradient-enabled forward pass for the online adaptation loop.
     // NOT wrapped in NoGradGuard — gradients must flow.
