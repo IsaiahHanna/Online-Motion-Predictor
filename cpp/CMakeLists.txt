@@ -17,19 +17,16 @@ pkg_check_modules(ZMQ REQUIRED libzmq)
 
 add_executable(intent_predictor
     src/main.cpp
-    src/buffer.cpp
+    src/ring_buffer.cpp
     src/pose_receiver.cpp
-    src.predictor.cpp
-    src/adapter.cpp
-    kernels/traj_scorer.cpp
-    kernels/adapter_grad.cpp
+    src/predictor.cpp
 )
 
 target_include_directories(intent_predictor PRIVATE
     include
     ${ZMQ_INCLUDE_DIRS}
 )
-target_link_directories(intent_predictor PRIVATE
+target_link_libraries(intent_predictor PRIVATE
     ${TORCH_LIBRARIES}
     ${ZMQ_LINK_LIBRARIES}
 )
