@@ -56,15 +56,16 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------
     // 0. Arguments
     // ------------------------------------------------------------------
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <model.pt> [endpoint]\n";
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <adapted_model.pt>  <base_model.pt> [endpoint]\n";
         std::cerr << "  endpoint default: tcp://localhost:5555\n";
         return 1;
     }
 
-    const std::string model_path = argv[1];
+    const std::string adapted_model_path = argv[1];
+    const std::string base_model_path    = argv[2];
     const std::string endpoint   =
-        (argc >= 3) ? argv[2] : "tcp://localhost:5555";
+        (argc >= 4) ? argv[3] : "tcp://localhost:5555";
 
     // ------------------------------------------------------------------
     // 1. SIGINT handler for clean shutdown
@@ -88,11 +89,11 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------
     RingBuffer         buf;
     PoseReceiver       poseReceiver(buf, endpoint, running);
-    Predictor          predictor(model_path, device);
+    Predictor          predictor(adapted_model_path, device);
     LoRAAdapterManager loraManager(predictor.module(), 1e-4f);
 
     // For logging performance comparison
-    Predictor          base_predictor("models/torchscript/intent_model.pt", device);
+    Predictor          base_predictor(base_model_path, device);
 
     // ------------------------------------------------------------------
     // 4. Warm-up
