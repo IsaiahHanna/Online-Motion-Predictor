@@ -8,7 +8,7 @@
 //                                         |
 //                               [Inference thread] (main)
 //                                    Predictor::infer()
-//                                    HeadAdapter::forward()
+//                                    LoRAAdapter::forward()
 //                                    trajectory scorer
 //                                         |
 //                                  ZMQ PUB out --> Python visualizer
@@ -16,7 +16,7 @@
 #include "ring_buffer.h"
 #include "pose_receiver.h"
 #include "predictor.h"
-#include "adapter.h"
+#include "lora_adapter.h"
 
 #include <torch/torch.h>
 #include <c10/cuda/CUDAStream.h>
@@ -86,10 +86,13 @@ int main(int argc, char* argv[])
     // ------------------------------------------------------------------
     // 3. Construct pipeline components
     // ------------------------------------------------------------------
-    RingBuffer   buf;
-    PoseReceiver poseReceiver(buf, endpoint, running);
-    Predictor    predictor(model_path, device);
-    HeadAdapter  headAdapter(128, K * 99, device);
+    RingBuffer         buf;
+    PoseReceiver       poseReceiver(buf, endpoint, running);
+    Predictor          predictor(model_path, device);
+    LoRAAdapterManager loraManager(predictor.module(), 1e-4f);
+
+    // For logging performance comparison
+    Predictor          base_predictor("models/torchscript/intent_model.pt", device);
 
     // ------------------------------------------------------------------
     // 4. Warm-up
@@ -179,7 +182,7 @@ int main(int argc, char* argv[])
 
     std::cout
         << "Initial adapter norm: "
-        << headAdapter.weight_norm()
+        << loraManager.weight_norm()
         << "\n";
 
     // Delayed label buffer
@@ -224,13 +227,7 @@ int main(int argc, char* argv[])
         auto hidden =
             predictor_output.hidden;       // [1, 128]
 
-        // Adapter produces a residual correction to the base prediction
-        auto adapter_out =
-            headAdapter.forward(hidden);
-
-        auto final_pred =
-            base_pred +
-            adapter_out.view({1, K, D});
+        auto final_pred = predictor_output.prediction;
 
         // 7c. Publish prediction
         auto pred_cpu =
@@ -293,24 +290,10 @@ int main(int argc, char* argv[])
 
             {
                 torch::NoGradGuard no_grad;
-
-                auto adapted_eval =
-                    base_eval +
-                    headAdapter
-                        .forward(old_output.hidden)
-                        .view({1, K, D});
-
-                base_mse =
-                    torch::mse_loss(
-                        base_eval,
-                        target
-                    ).item<double>();
-
-                adapted_mse =
-                    torch::mse_loss(
-                        adapted_eval,
-                        target
-                    ).item<double>();
+                
+                auto base_only = base_predictor.infer(old_x);
+                base_mse    = torch::mse_loss(base_only.detach(),target).item<double>();
+                adapted_mse = torch::mse_loss(old_output.prediction.detach(),target).item<double>();
             }
 
             // ----------------------------------------------------------
@@ -354,13 +337,10 @@ int main(int argc, char* argv[])
 
                 ++recent_mse_count;
 
-                auto pred_with_grad =
-                    base_eval +
-                    headAdapter
-                        .forward(old_output.hidden)
-                        .view({1, K, D});
+                auto grad_output    = predictor.forward_for_update(old_x);
+                auto pred_with_grad = grad_output.prediction;       // adapter grad flows automatically
 
-                headAdapter.update(
+                loraManager.update(
                     pred_with_grad,
                     target
                 );
@@ -377,7 +357,7 @@ int main(int argc, char* argv[])
                         << update_count
 
                         << "  adapter norm: "
-                        << headAdapter.weight_norm()
+                        << loraManager.weight_norm()
 
                         << "  recent base MSE: "
                         << recent_base_mse_sum /
@@ -413,7 +393,7 @@ int main(int argc, char* argv[])
                         << "60 SECOND ADAPTATION COMPLETE\n"
 
                         << "Adapter norm: "
-                        << headAdapter.weight_norm()
+                        << loraManager.weight_norm()
                         << "\n"
 
                         << "Training base MSE: "
@@ -488,8 +468,8 @@ int main(int argc, char* argv[])
                 << ms
                 << " ms\n"
 
-                << "   HeadAdapter weight norm: "
-                << headAdapter.weight_norm()
+                << "   LoRAAdapter weight norm: "
+                << loraManager.weight_norm()
                 << "\n";
         }
     }
