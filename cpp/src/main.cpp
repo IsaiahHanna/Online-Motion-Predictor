@@ -163,7 +163,7 @@ int main(int argc, char* argv[])
     {
         torch::NoGradGuard no_grad;
 
-        for (const auto& item : predictor.named_parameters()) {
+        for (const auto& item : base_predictor.named_parameters()) {
             base_norm_before +=
                 item.second
                     .detach()
@@ -212,7 +212,7 @@ int main(int argc, char* argv[])
                 last_seq,
                 running
             );
-            
+
         if (!running.load()) {
             break;
         }
@@ -227,11 +227,7 @@ int main(int argc, char* argv[])
         auto predictor_output =
             predictor.infer_with_hidden(x);
 
-        auto base_pred =
-            predictor_output.prediction;   // [1, K, 99]
 
-        auto hidden =
-            predictor_output.hidden;       // [1, 128]
 
         auto final_pred = predictor_output.prediction;
 
@@ -524,7 +520,7 @@ int main(int argc, char* argv[])
     {
         torch::NoGradGuard no_grad;
 
-        for (const auto& item : predictor.named_parameters()) {
+        for (const auto& item : base_predictor.named_parameters()) {
             base_norm_after +=
                 item.second
                     .detach()
