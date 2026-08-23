@@ -58,11 +58,29 @@ void RingBuffer::push(const Frame& frame)
 uint64_t RingBuffer::get_window(Window& out, uint64_t after_seq)
 {
     std::unique_lock<std::mutex> lock(mutex_);
-    cv_.wait(lock, [&]{return head_ >= W && head_ > after_seq; });
-    const uint64_t newest = head_;               // frames [newest-W, newest]
+
+    cv_.wait_for(
+        lock,
+        std::chrono::milliseconds(100),
+        [&] {
+            return !running.load() ||
+                   (head_ >= W && head_ > after_seq);
+        }
+    );
+
+    if (!running.load()) {
+        return after_seq;
+    }
+
+    if (!(head_ >= W && head_ > after_seq)) {
+        return after_seq;
+    }
+
+    const uint64_t newest = head_;
 
     for (int i = 0; i < W; ++i) {
-        out[i] = buf_[(newest - W + i) % BUF]; 
+        out[i] = buf_[(newest - W + i) % BUF];
     }
+
     return newest;
 }

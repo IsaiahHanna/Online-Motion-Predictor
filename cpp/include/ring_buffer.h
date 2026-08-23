@@ -9,6 +9,7 @@
 #include <array>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -32,7 +33,7 @@ class RingBuffer
 {
 public:
     void push(const Frame& frame);
-    uint64_t get_window(Window& out, uint64_t after_seq);
+    uint64_t get_window(Window& out, uint64_t after_seq, const std::atomic<bool>& running);
 
 private:
     uint64_t head_ = 0;       // total frames written (monotonic)
