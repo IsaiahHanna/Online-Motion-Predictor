@@ -20,6 +20,7 @@ add_executable(intent_predictor
     src/ring_buffer.cpp
     src/pose_receiver.cpp
     src/predictor.cpp
+    src/lora_adapter.cpp
 )
 
 target_include_directories(intent_predictor PRIVATE
