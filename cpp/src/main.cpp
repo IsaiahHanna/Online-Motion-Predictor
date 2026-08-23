@@ -209,8 +209,13 @@ int main(int argc, char* argv[])
         last_seq =
             buf.get_window(
                 window,
-                last_seq
+                last_seq,
+                running
             );
+            
+        if (!running.load()) {
+            break;
+        }
 
         // 7b. Build tensor and run base inference
         auto x =
