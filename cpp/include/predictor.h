@@ -44,6 +44,9 @@ public:
     // Use the "adapter" substring to partition trainable from frozen params.
     std::vector<std::pair<std::string, torch::Tensor>> named_parameters();
 
+    // Public accessor for module
+    torch::jit::script::Module& module() {return module_;}
+
 private:
 
     torch::jit::script::Module module_;
