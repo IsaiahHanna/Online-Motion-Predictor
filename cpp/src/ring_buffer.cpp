@@ -15,7 +15,7 @@
 //   - The buffer must hold BUF >= W frames so a full window always fits
 
 #include "ring_buffer.h"
-
+#include <chrono>
 // ---------------------------------------------------------------------------
 // push()
 //
@@ -55,7 +55,7 @@ void RingBuffer::push(const Frame& frame)
 // Use cv_.wait() with a lambda predicate so the lock is released while
 // sleeping and automatically re-acquired before the predicate is re-checked.
 // ---------------------------------------------------------------------------
-uint64_t RingBuffer::get_window(Window& out, uint64_t after_seq)
+uint64_t RingBuffer::get_window(Window& out, uint64_t after_seq, const std::atomic<bool>& running)
 {
     std::unique_lock<std::mutex> lock(mutex_);
 
